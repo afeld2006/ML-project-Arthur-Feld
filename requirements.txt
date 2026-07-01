@@ -1,1 +1,5 @@
-#code here
+numpy
+scipy
+pandas
+h5py
+scikit-learn
