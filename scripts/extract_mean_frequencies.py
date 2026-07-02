@@ -15,7 +15,9 @@ def main() -> None:
 
     parser.add_argument(
         "input_dir",
-        help="Folder containing .mat files. Use . if the .mat files are in the repo root.",
+        nargs="?",
+        default="data/raw",
+        help="Folder containing .mat files (default: data/raw).",
     )
 
     parser.add_argument(
