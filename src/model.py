@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
+
+FEATURE_COL = "mean_frequency_hz"
+TARGET_COL = "annoyance_mean"
+
+
+def load_dataset(dataset_csv: str | Path) -> pd.DataFrame:
+    """Load the joined modeling dataset and drop rows missing X or y."""
+    df = pd.read_csv(dataset_csv)
+    return df.dropna(subset=[FEATURE_COL, TARGET_COL]).reset_index(drop=True)
+
+
+def fit_linear_model(
+    df: pd.DataFrame,
+    test_size: float = 0.2,
+    random_state: int = 42,
+) -> dict:
+    """Split 80/20, fit a single-feature linear regression, and keep predictions."""
+    X = df[[FEATURE_COL]].to_numpy()
+    y = df[TARGET_COL].to_numpy()
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state
+    )
+
+    model = LinearRegression().fit(X_train, y_train)
+
+    return {
+        "model": model,
+        "X_train": X_train, "X_test": X_test,
+        "y_train": y_train, "y_test": y_test,
+        "y_pred_train": model.predict(X_train),
+        "y_pred_test": model.predict(X_test),
+    }
+
+
+def evaluate(res: dict) -> dict:
+    """Compute RMSE (train/test), R2, and a mean-prediction baseline to beat."""
+    y_train, y_test = res["y_train"], res["y_test"]
+
+    rmse_test = float(np.sqrt(mean_squared_error(y_test, res["y_pred_test"])))
+    rmse_train = float(np.sqrt(mean_squared_error(y_train, res["y_pred_train"])))
+    r2_test = float(r2_score(y_test, res["y_pred_test"])) if len(y_test) > 1 else float("nan")
+
+    # Baseline: always predict the training-set mean annoyance.
+    baseline_pred = np.full_like(y_test, y_train.mean(), dtype=float)
+    rmse_baseline = float(np.sqrt(mean_squared_error(y_test, baseline_pred)))
+
+    model = res["model"]
+    return {
+        "slope": float(model.coef_[0]),
+        "intercept": float(model.intercept_),
+        "rmse_train": rmse_train,
+        "rmse_test": rmse_test,
+        "rmse_baseline": rmse_baseline,
+        "r2_test": r2_test,
+        "n_train": int(len(y_train)),
+        "n_test": int(len(y_test)),
+    }
+
+
+def make_plots(df: pd.DataFrame, res: dict, out_dir: str | Path) -> list[Path]:
+    """Save (1) scatter of all data + fitted line, (2) predicted vs actual on test."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    model = res["model"]
+    saved = []
+
+    # 1) Data + fitted line
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.scatter(df[FEATURE_COL], df[TARGET_COL], alpha=0.7, label="all signals")
+    xs = np.linspace(df[FEATURE_COL].min(), df[FEATURE_COL].max(), 100).reshape(-1, 1)
+    ax.plot(xs, model.predict(xs), color="crimson", label="fitted line")
+    ax.set_xlabel("Mean frequency (Hz)")
+    ax.set_ylabel("Annoyance (mean rating)")
+    ax.set_title("Annoyance vs. mean frequency")
+    ax.legend()
+    fig.tight_layout()
+    p1 = out_dir / "fit_scatter.png"
+    fig.savefig(p1, dpi=150)
+    plt.close(fig)
+    saved.append(p1)
+
+    # 2) Predicted vs actual (test set)
+    y_test, y_pred = res["y_test"], res["y_pred_test"]
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.scatter(y_test, y_pred, alpha=0.8)
+    lims = [min(y_test.min(), y_pred.min()), max(y_test.max(), y_pred.max())]
+    ax.plot(lims, lims, "k--", label="perfect prediction")
+    ax.set_xlabel("Actual annoyance")
+    ax.set_ylabel("Predicted annoyance")
+    ax.set_title("Predicted vs. actual (test set)")
+    ax.legend()
+    fig.tight_layout()
+    p2 = out_dir / "pred_vs_actual.png"
+    fig.savefig(p2, dpi=150)
+    plt.close(fig)
+    saved.append(p2)
+
+    return saved

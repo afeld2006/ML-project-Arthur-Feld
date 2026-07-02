@@ -1,0 +1,11 @@
+MVP linear model: annoyance ~ mean_frequency_hz
+------------------------------------------------
+samples: 77  (train 61, test 16)
+fitted:  annoyance = 0.003958 * freq + 0.8161
+
+RMSE (test):      0.3398
+RMSE (train):     0.4516
+RMSE (baseline):  0.5749   <- predicting the mean
+R^2  (test):      0.6295
+
+Beats the baseline.
