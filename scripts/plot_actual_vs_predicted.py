@@ -1,14 +1,15 @@
 """
-Plot actual vs. predicted annoyance against mean frequency.
+Plot actual vs. predicted annoyance against mean frequency, for the TEST SET only.
 
-Black dots = real annoyance scores (the labels y).
+Black dots = real annoyance scores (the labels y) for the held-out test signals.
 Blue dots  = the model's predictions (which lie on the fitted line).
 A thin vertical line joins each pair, showing the residual (the error).
 
-Run from the project root:
-    py scripts/plot_actual_vs_predicted.py
+Run from the project root, e.g.:
+    py scripts/plot_actual_vs_predicted.py --test-size 0.30 --output-dir reports/split_7030
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -19,42 +20,48 @@ import matplotlib.pyplot as plt
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from model import FEATURE_COL, TARGET_COL, fit_linear_model, load_dataset
+from model import fit_linear_model, load_dataset
 
 
 def main() -> None:
-    df = load_dataset("features/dataset.csv")
-    res = fit_linear_model(df, test_size=0.2, random_state=42)
-    model = res["model"]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test-size", type=float, default=0.20,
+                        help="Test fraction for the split (e.g. 0.20, 0.30, 0.45).")
+    parser.add_argument("--output-dir", default="reports",
+                        help="Folder to save the plot in.")
+    args = parser.parse_args()
 
-    # Predict for EVERY signal (so the plot shows the full dataset)
-    X = df[[FEATURE_COL]].to_numpy()
-    x = X.ravel()
-    y_true = df[TARGET_COL].to_numpy()
-    y_pred = model.predict(X)
+    df = load_dataset("features/dataset.csv")
+    res = fit_linear_model(df, test_size=args.test_size, random_state=42)
+
+    # Use ONLY the held-out test set (the points the model never saw)
+    x = res["X_test"].ravel()
+    y_true = res["y_test"]
+    y_pred = res["y_pred_test"]
+
+    pct = round((1 - args.test_size) * 100)
+    tag = f"{pct}{100 - pct}"
 
     fig, ax = plt.subplots(figsize=(8, 5.5))
 
-    # residual lines first (drawn underneath the dots)
     for xi, yt, yp in zip(x, y_true, y_pred):
         ax.plot([xi, xi], [yt, yp], color="0.8", linewidth=0.8, zorder=1)
 
-    # real annoyance scores = black dots
-    ax.scatter(x, y_true, color="black", s=30, zorder=3,
+    ax.scatter(x, y_true, color="black", s=40, zorder=3,
                label="Real annoyance (y)")
-    # predictions = blue dots (they lie on the fitted line)
-    ax.scatter(x, y_pred, color="tab:blue", s=30, zorder=3,
+    ax.scatter(x, y_pred, color="tab:blue", s=40, zorder=3,
                label="Predicted annoyance")
 
     ax.set_xlabel("Mean frequency (Hz)")
     ax.set_ylabel("Annoyance (0-5)")
-    ax.set_title("Real vs. predicted annoyance across mean frequency")
+    ax.set_title(f"Real vs. predicted annoyance — test set ({tag} split)")
     ax.legend(frameon=False)
     ax.grid(True, color="0.92", linewidth=0.6)
     fig.tight_layout()
 
-    out = Path("reports/actual_vs_predicted_over_freq.png")
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"actual_vs_predicted_test_{tag}.png"
     fig.savefig(out, dpi=150)
     print(f"Saved {out}")
 
