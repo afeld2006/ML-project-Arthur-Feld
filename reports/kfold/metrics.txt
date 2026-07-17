@@ -1,0 +1,11 @@
+5-fold cross-validation  (n = 77 signals)
+------------------------------------------------
+Per-fold results:
+  fold 1:  RMSE = 0.3398   R2 = 0.6295
+  fold 2:  RMSE = 0.4822   R2 = 0.1220
+  fold 3:  RMSE = 0.3739   R2 = 0.3469
+  fold 4:  RMSE = 0.4465   R2 = 0.3014
+  fold 5:  RMSE = 0.5122   R2 = 0.3813
+
+RMSE:  0.4309  ±  0.0725
+R^2 :  0.3562  ±  0.1825
