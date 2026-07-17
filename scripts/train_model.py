@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+# Make src/ importable so this script can call the shared model logic
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
@@ -24,15 +25,17 @@ def main() -> None:
                         help="Where to save plots and metrics.")
     args = parser.parse_args()
 
+    # Pipeline: load data, fit the model, score it, and make the plots
     df = load_dataset(args.dataset)
     res = fit_linear_model(df, test_size=args.test_size,
                            random_state=args.random_state)
     m = evaluate(res)
     plots = make_plots(df, res, args.output_dir)
 
+    # Build the metrics report line by line for printing and saving
     lines = [
         "MVP linear model: annoyance ~ mean_frequency_hz",
-        "-" * 48,
+        "-" * 48,  # separator rule
         f"samples: {len(df)}  (train {m['n_train']}, test {m['n_test']})",
         f"fitted:  annoyance = {m['slope']:.6f} * freq + {m['intercept']:.4f}",
         "",
@@ -41,19 +44,23 @@ def main() -> None:
         f"RMSE (baseline):  {m['rmse_baseline']:.4f}   <- predicting the mean",
         f"R^2  (test):      {m['r2_test']:.4f}",
     ]
+    # Verdict: did the model beat the mean-predicting baseline?
     verdict = ("Beats the baseline." if m["rmse_test"] < m["rmse_baseline"]
                else "Does NOT beat the baseline (single feature is weak).")
     lines += ["", verdict]
     report = "\n".join(lines)
     print(report)
 
+    # Save the same report to metrics.txt, creating the folder if needed
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "metrics.txt").write_text(report + "\n", encoding="utf-8")
+    # List every file written (the metrics file plus the plots)
     print("\nSaved:")
     for p in [out_dir / "metrics.txt", *plots]:
         print(f"  {p}")
 
 
+# Only run when executed directly, not when imported
 if __name__ == "__main__":
     main()
