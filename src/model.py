@@ -110,3 +110,45 @@ def make_plots(df: pd.DataFrame, res: dict, out_dir: str | Path) -> list[Path]:
     saved.append(p2)
 
     return saved
+
+
+def cross_validate(
+    df,
+    n_splits: int = 5,
+    random_state: int = 42,
+):
+    """Run k-fold cross-validation of the single-feature linear model.
+
+    Shuffles the data (fixed seed) and rotates through n_splits folds, so every
+    signal is in the test fold exactly once. Returns per-fold RMSE and R2 plus
+    their mean and standard deviation.
+    """
+    import numpy as np
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import mean_squared_error, r2_score
+    from sklearn.model_selection import KFold
+
+    X = df[[FEATURE_COL]].to_numpy()
+    y = df[TARGET_COL].to_numpy()
+
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+
+    fold_rmse = []
+    fold_r2 = []
+    for train_idx, test_idx in kf.split(X):
+        model = LinearRegression().fit(X[train_idx], y[train_idx])
+        y_hat = model.predict(X[test_idx])
+        fold_rmse.append(float(np.sqrt(mean_squared_error(y[test_idx], y_hat))))
+        fold_r2.append(float(r2_score(y[test_idx], y_hat)))
+
+    fold_rmse = np.array(fold_rmse)
+    fold_r2 = np.array(fold_r2)
+    return {
+        "n_splits": n_splits,
+        "fold_rmse": fold_rmse.tolist(),
+        "fold_r2": fold_r2.tolist(),
+        "rmse_mean": float(fold_rmse.mean()),
+        "rmse_std": float(fold_rmse.std(ddof=1)),
+        "r2_mean": float(fold_r2.mean()),
+        "r2_std": float(fold_r2.std(ddof=1)),
+    }
