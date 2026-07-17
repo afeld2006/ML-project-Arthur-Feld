@@ -14,9 +14,10 @@ import sys
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # non-interactive backend: write a file, no window
 import matplotlib.pyplot as plt
 
+# Make src/ importable so we can reuse the model-fitting logic
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
@@ -32,21 +33,25 @@ def main() -> None:
     args = parser.parse_args()
 
     df = load_dataset("features/dataset.csv")
+    # Refit with the requested split; fixed seed matches the other scripts
     res = fit_linear_model(df, test_size=args.test_size, random_state=42)
 
     # Use ONLY the held-out test set (the points the model never saw)
-    x = res["X_test"].ravel()
-    y_true = res["y_test"]
-    y_pred = res["y_pred_test"]
+    x = res["X_test"].ravel()          # mean frequency of each test signal
+    y_true = res["y_test"]             # real annoyance
+    y_pred = res["y_pred_test"]        # model prediction
 
+    # Build a "8020"-style tag from the split, used in the title and filename
     pct = round((1 - args.test_size) * 100)
     tag = f"{pct}{100 - pct}"
 
     fig, ax = plt.subplots(figsize=(8, 5.5))
 
+    # Vertical grey line per point: shows the residual (real vs. predicted gap)
     for xi, yt, yp in zip(x, y_true, y_pred):
         ax.plot([xi, xi], [yt, yp], color="0.8", linewidth=0.8, zorder=1)
 
+    # Black dots: real annoyance; blue dots: predictions (drawn on top, zorder=3)
     ax.scatter(x, y_true, color="black", s=40, zorder=3,
                label="Real annoyance (y)")
     ax.scatter(x, y_pred, color="tab:blue", s=40, zorder=3,
@@ -59,6 +64,7 @@ def main() -> None:
     ax.grid(True, color="0.92", linewidth=0.6)
     fig.tight_layout()
 
+    # Save into the chosen folder, creating it if needed; name encodes the split
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"actual_vs_predicted_test_{tag}.png"
@@ -66,5 +72,6 @@ def main() -> None:
     print(f"Saved {out}")
 
 
+# Only run when executed directly, not when imported
 if __name__ == "__main__":
     main()
