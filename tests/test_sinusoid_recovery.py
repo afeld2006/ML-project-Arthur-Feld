@@ -25,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
+# Make src/ importable regardless of where we run from
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
@@ -44,38 +45,41 @@ def make_spectrogram(freqs_hz, amps):
     Returns (freq_vector, power_matrix) with power_matrix shaped frequency x time,
     which is exactly the layout calculate_mean_frequency expects.
     """
-    n = int(FS * DURATION)
-    t = np.arange(n) / FS
+    n = int(FS * DURATION)     # total number of samples
+    t = np.arange(n) / FS      # time axis in seconds
 
+    # Sum the requested sine waves into one waveform
     x = np.zeros(n)
     for f, a in zip(freqs_hz, amps):
         x += a * np.sin(2 * np.pi * f * t)
 
-    step = NPERSEG - NOVERLAP
-    window = np.hanning(NPERSEG)
+    step = NPERSEG - NOVERLAP    # hop between successive windows
+    window = np.hanning(NPERSEG)  # taper each window to reduce spectral leakage
 
+    # Slide a window along the signal; one FFT per window = one time frame
     frames = []
     for start in range(0, n - NPERSEG + 1, step):
         segment = x[start:start + NPERSEG] * window
-        spectrum = np.fft.rfft(segment)
+        spectrum = np.fft.rfft(segment)           # real FFT of this window
         frames.append(np.abs(spectrum) ** 2)      # power = |X|^2
 
     power = np.array(frames).T                     # frequency x time
-    freq = np.fft.rfftfreq(NPERSEG, d=1.0 / FS)
+    freq = np.fft.rfftfreq(NPERSEG, d=1.0 / FS)    # the frequency of each bin (Hz)
     return freq, power
 
 
 def check(name, got, expected, tol=TOL_HZ):
-    ok = abs(got - expected) <= tol
+    ok = abs(got - expected) <= tol   # pass if within tolerance
     status = "PASS" if ok else "FAIL"
     print(f"[{status}] {name}: got {got:.3f} Hz, expected {expected:.3f} Hz")
     if not ok:
-        raise AssertionError(f"{name} failed (tolerance {tol} Hz)")
+        raise AssertionError(f"{name} failed (tolerance {tol} Hz)")  # stop on failure
 
 
 def test_a_frequency_recovery():
     """Ten pure sines at known frequencies must each be recovered."""
     print("A) Frequency recovery - 10 pure sinusoids")
+    # For a single tone the centroid should land on that tone's frequency
     for f0 in [200, 400, 600, 800, 1000, 1200, 1500, 1800, 2200, 2600]:
         freq, power = make_spectrogram([f0], [1.0])
         got = calculate_mean_frequency(freq, power, values_are_db=False)
@@ -87,6 +91,7 @@ def test_b_amplitude_invariance():
     """The centroid is normalised, so amplitude must NOT shift the frequency."""
     print("B) Amplitude invariance - same frequency, different amplitudes")
     f0 = 1000.0
+    # Same tone, louder or quieter: recovered frequency must stay 1000 Hz
     for amp in [0.1, 1.0, 5.0, 50.0]:
         freq, power = make_spectrogram([f0], [amp])
         got = calculate_mean_frequency(freq, power, values_are_db=False)
@@ -110,6 +115,7 @@ def test_c_two_tone_weighting():
         freq, power = make_spectrogram(freqs, amps)
         got = calculate_mean_frequency(freq, power, values_are_db=False)
 
+        # Compute the expected centroid by hand, weighting by power (amplitude^2)
         weights = np.array(amps) ** 2                     # power ~ amplitude^2
         expected = float(np.sum(np.array(freqs) * weights) / np.sum(weights))
         check(f"  {freqs} amps {amps}  [{note}]", got, expected)
@@ -122,16 +128,19 @@ def test_d_db_path():
     for f0 in [500.0, 1500.0, 2500.0]:
         freq, power = make_spectrogram([f0], [1.0])
 
+        # Recover the frequency from linear power and from the dB version
         from_linear = calculate_mean_frequency(freq, power, values_are_db=False)
         power_db = 10.0 * np.log10(power + 1e-20)         # guard against log(0)
         from_db = calculate_mean_frequency(freq, power_db, values_are_db=True)
 
+        # Both paths must return the true frequency
         check(f"  {f0} Hz via linear", from_linear, f0)
         check(f"  {f0} Hz via dB    ", from_db, f0)
     print()
 
 
 def main():
+    # Run all four test groups in order
     test_a_frequency_recovery()
     test_b_amplitude_invariance()
     test_c_two_tone_weighting()
