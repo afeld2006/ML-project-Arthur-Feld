@@ -20,52 +20,53 @@ from mat_spectrogram_features import calculate_mean_frequency
 
 
 def check(name, got, expected, tol=1e-9):
+    # Compare within a tiny tolerance to allow for floating-point rounding
     ok = np.isclose(got, expected, atol=tol)
     status = "PASS" if ok else "FAIL"
     print(f"[{status}] {name}: got {got:.4f} Hz, expected {expected:.4f} Hz")
     if not ok:
-        raise AssertionError(f"{name} failed")
+        raise AssertionError(f"{name} failed")  # stop on the first failing case
 
 
 def main():
-    freq = np.array([100.0, 200.0, 300.0, 400.0, 500.0])
+    freq = np.array([100.0, 200.0, 300.0, 400.0, 500.0])  # shared frequency axis
 
     # 1) All power in the 300 Hz bin -> centroid must be exactly 300
-    power = np.zeros((5, 3))
-    power[2, :] = 1.0
+    power = np.zeros((5, 3))   # 5 frequencies x 3 time frames, all zero
+    power[2, :] = 1.0          # put all energy in the 300 Hz row
     check("single-bin centroid",
           calculate_mean_frequency(freq, power, values_are_db=False), 300.0)
 
     # 2) Symmetric weights 1,2,1 around 200 Hz -> 200
     freq3 = np.array([100.0, 200.0, 300.0])
-    power = np.array([[1.0], [2.0], [1.0]])
+    power = np.array([[1.0], [2.0], [1.0]])  # one time frame, symmetric weights
     check("symmetric centroid",
           calculate_mean_frequency(freq3, power, values_are_db=False), 200.0)
 
     # 3) Asymmetric: (100*1 + 200*1 + 400*2) / 4 = 275
     freqA = np.array([100.0, 200.0, 400.0])
-    power = np.array([[1.0], [1.0], [2.0]])
+    power = np.array([[1.0], [1.0], [2.0]])  # heavier weight on 400 Hz
     check("asymmetric weighted mean",
           calculate_mean_frequency(freqA, power, values_are_db=False), 275.0)
 
     # 4) dB path must match linear path (this tests the dB->power conversion)
-    rng = np.random.default_rng(0)
-    lin = rng.uniform(0.1, 10.0, size=(5, 4))
-    db = 10.0 * np.log10(lin)
+    rng = np.random.default_rng(0)                 # fixed seed: reproducible input
+    lin = rng.uniform(0.1, 10.0, size=(5, 4))      # random linear power
+    db = 10.0 * np.log10(lin)                       # same data expressed in dB
     from_linear = calculate_mean_frequency(freq, lin, values_are_db=False)
     from_db = calculate_mean_frequency(freq, db, values_are_db=True)
-    check("dB conversion matches linear", from_db, from_linear)
+    check("dB conversion matches linear", from_db, from_linear)  # must agree
 
     # 5) fmin/fmax window: keep 200-400, symmetric -> 300
-    power = np.ones((5, 3))
+    power = np.ones((5, 3))   # uniform power across all bins
     check("fmin/fmax window",
           calculate_mean_frequency(freq, power, values_are_db=False,
-                                   fmin=200, fmax=400), 300.0)
+                                   fmin=200, fmax=400), 300.0)  # midpoint of the window
 
     # 6) peak method: strongest bin is 400 Hz every frame -> 400
     power = np.zeros((5, 3))
-    power[3, :] = 5.0
-    power[0, :] = 1.0
+    power[3, :] = 5.0   # 400 Hz is the strongest bin
+    power[0, :] = 1.0   # 100 Hz present but weaker
     check("peak method",
           calculate_mean_frequency(freq, power, values_are_db=False,
                                    method="peak"), 400.0)
