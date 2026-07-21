@@ -87,10 +87,10 @@ def make_plots(df: pd.DataFrame, res: dict, out_dir: str | Path) -> list[Path]:
     # 1) Data + fitted line; training and test signals drawn with different shapes
     fig, ax = plt.subplots(figsize=(7, 5))
 
-    # Triangles: the signals the line was actually fitted on
+    # Blue triangles: the signals the line was actually fitted on
     ax.scatter(res["X_train"].ravel(), res["y_train"], marker="^", color="tab:blue", alpha=0.7, label="training signals")
-    # Crosses: the held-out signals, shown but not used for fitting
-    ax.scatter(res["X_test"].ravel(), res["y_test"], marker="x", color="tab:blue", alpha=0.9, label="test signals")
+    # Orange crosses: the held-out signals, shown but not used for fitting
+    ax.scatter(res["X_test"].ravel(), res["y_test"], marker="x", color="tab:orange", alpha=0.9, label="test signals")
     # Evaluate the fitted line across the frequency range to draw it smoothly
     xs = np.linspace(df[FEATURE_COL].min(), df[FEATURE_COL].max(), 100).reshape(-1, 1)
     ax.plot(xs, model.predict(xs), color="crimson", label="fitted line")
