@@ -1,11 +1,18 @@
-5-fold cross-validation  (n = 77 signals)
-------------------------------------------------
-Per-fold results:
-  fold 1:  RMSE = 0.3398   R2 = 0.6295
-  fold 2:  RMSE = 0.4822   R2 = 0.1220
-  fold 3:  RMSE = 0.3739   R2 = 0.3469
-  fold 4:  RMSE = 0.4465   R2 = 0.3014
-  fold 5:  RMSE = 0.5122   R2 = 0.3813
+5-fold with holdout  (n = 77 signals)
+====================================================
+pool used for folds: 61 signals
+final holdout set:   16 signals (never seen)
 
-RMSE:  0.4309  ±  0.0725
-R^2 :  0.3562  ±  0.1825
+Validation results per fold:
+  fold 1 (val n=13):  RMSE = 0.4262   R2 = 0.3183
+  fold 2 (val n=12):  RMSE = 0.5790   R2 = 0.1118
+  fold 3 (val n=12):  RMSE = 0.5034   R2 = 0.2732
+  fold 4 (val n=12):  RMSE = 0.4955   R2 = -0.2474
+  fold 5 (val n=12):  RMSE = 0.3274   R2 = 0.3714  <= best
+
+Selected fold: 5 (lowest validation RMSE)
+fitted:  annoyance = 0.003976 * freq + 0.8263
+
+FINAL RESULTS on the held-out 20 percent:
+  RMSE:      0.3498
+  R^2 :      0.6075

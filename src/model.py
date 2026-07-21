@@ -123,43 +123,76 @@ def make_plots(df: pd.DataFrame, res: dict, out_dir: str | Path) -> list[Path]:
 def cross_validate(
     df,
     n_splits: int = 5,
+    holdout_size: float = 0.20,
     random_state: int = 42,
 ):
-    """Run k-fold cross-validation of the single-feature linear model.
+    """Hold out a final test set, run k-fold on the rest, keep the best fold.
 
-    Shuffles the data (fixed seed) and rotates through n_splits folds, so every
-    signal is in the test fold exactly once. Returns per-fold RMSE and R2 plus
-    their mean and standard deviation.
+    Procedure:
+      1. Set aside holdout_size of the signals as a final test set; it is never
+         used for training or for choosing a model.
+      2. Split the remaining signals into n_splits folds.
+      3. Train n_splits times: 4 folds train, 1 fold validates each time.
+      4. Select the fold with the LOWEST validation RMSE.
+      5. Evaluate that selected model on the untouched holdout set.
+      6. The holdout scores are the reported results.
     """
     import numpy as np
     from sklearn.linear_model import LinearRegression
     from sklearn.metrics import mean_squared_error, r2_score
-    from sklearn.model_selection import KFold
+    from sklearn.model_selection import KFold, train_test_split
 
     X = df[[FEATURE_COL]].to_numpy()
     y = df[TARGET_COL].to_numpy()
 
-    # Shuffle then split into n_splits folds; fixed seed for reproducibility
+    # Step 1: separate the final test set from the pool used for k-fold
+    X_pool, X_holdout, y_pool, y_holdout = train_test_split(
+        X, y, test_size=holdout_size, random_state=random_state
+    )
+
+    # Step 2: shuffle the pool then divide it into n_splits folds
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
 
-    fold_rmse = []
-    fold_r2 = []
-    # Each pass: train on 4 folds, test on the held-out fold
-    for train_idx, test_idx in kf.split(X):
-        model = LinearRegression().fit(X[train_idx], y[train_idx])
-        y_hat = model.predict(X[test_idx])
-        fold_rmse.append(float(np.sqrt(mean_squared_error(y[test_idx], y_hat))))
-        fold_r2.append(float(r2_score(y[test_idx], y_hat)))
+    fold_models = []   # the model trained in each fold
+    fold_rmse = []     # validation RMSE per fold
+    fold_r2 = []       # validation R2 per fold
+    fold_n_val = []    # size of each validation fold
 
-    fold_rmse = np.array(fold_rmse)
-    fold_r2 = np.array(fold_r2)
-    # Report each fold plus the mean (stable estimate) and std (spread across folds)
+    # Step 3: each pass trains on the other folds and validates on this one
+    for train_idx, val_idx in kf.split(X_pool):
+        model = LinearRegression().fit(X_pool[train_idx], y_pool[train_idx])
+        y_hat = model.predict(X_pool[val_idx])
+
+        fold_models.append(model)
+        fold_rmse.append(float(np.sqrt(mean_squared_error(y_pool[val_idx], y_hat))))
+        fold_r2.append(float(r2_score(y_pool[val_idx], y_hat)))
+        fold_n_val.append(int(len(val_idx)))
+
+    # Step 4: pick the fold with the lowest validation RMSE
+    best_index = int(np.argmin(fold_rmse))
+    best_model = fold_models[best_index]
+
+    # Step 5: score the selected model on the holdout it has never seen
+    y_hat_holdout = best_model.predict(X_holdout)
+    holdout_rmse = float(np.sqrt(mean_squared_error(y_holdout, y_hat_holdout)))
+    holdout_r2 = float(r2_score(y_holdout, y_hat_holdout))
+
+    # Step 6: return per-fold detail plus the reported holdout results
     return {
         "n_splits": n_splits,
-        "fold_rmse": fold_rmse.tolist(),
-        "fold_r2": fold_r2.tolist(),
-        "rmse_mean": float(fold_rmse.mean()),
-        "rmse_std": float(fold_rmse.std(ddof=1)),   # ddof=1: sample std (divide by k-1)
-        "r2_mean": float(fold_r2.mean()),
-        "r2_std": float(fold_r2.std(ddof=1)),
+        "X_holdout": X_holdout,          # holdout features, for plotting
+        "y_holdout": y_holdout,          # holdout true annoyance
+        "y_pred_holdout": y_hat_holdout, # holdout predictions
+        "n_pool": int(len(y_pool)),
+        "n_holdout": int(len(y_holdout)),
+        "fold_rmse": fold_rmse,
+        "fold_r2": fold_r2,
+        "fold_n_val": fold_n_val,
+        "best_fold": best_index + 1,          # 1-based for reporting
+        "best_fold_rmse": fold_rmse[best_index],
+        "best_fold_r2": fold_r2[best_index],
+        "slope": float(best_model.coef_[0]),      # a in y = a*x + b
+        "intercept": float(best_model.intercept_),  # b in y = a*x + b
+        "holdout_rmse": holdout_rmse,             # reported result
+        "holdout_r2": holdout_r2,                 # reported result
     }
