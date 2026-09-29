@@ -1,3 +1,19 @@
+"""
+Fit and evaluate the linear model: annoyance predicted from mean frequency.
+
+This module holds the whole MVP modeling logic: loading the joined dataset,
+fitting an ordinary least squares regression on a train/test split, scoring
+it against a predict-the-mean baseline, drawing the standard figures, and
+the holdout plus k-fold procedure used for the reported results.
+
+Two rules drive the design. Metrics are only ever computed on data the
+model did not train on; and every split uses a fixed random seed, so any
+number in the reports can be regenerated exactly.
+
+The scripts train_model.py and train_model_kfold.py are thin wrappers
+around these functions.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,14 +22,19 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold, train_test_split
 
 FEATURE_COL = "mean_frequency_hz"  # model input X
 TARGET_COL = "annoyance_mean"      # model target y
 
 
 def load_dataset(dataset_csv: str | Path) -> pd.DataFrame:
-    """Load the joined modeling dataset and drop rows missing X or y."""
+    """
+    Load the joined modeling dataset and drop rows missing X or y.
+
+    A row without a feature or a label can serve neither fitting nor
+    scoring, so it is removed before anything else sees the data.
+    """
     df = pd.read_csv(dataset_csv)
     # Drop rows without a feature or a label; reset the index for a clean frame
     return df.dropna(subset=[FEATURE_COL, TARGET_COL]).reset_index(drop=True)
@@ -24,7 +45,14 @@ def fit_linear_model(
     test_size: float = 0.2,
     random_state: int = 42,
 ) -> dict:
-    """Split 80/20, fit a single-feature linear regression, and keep predictions."""
+    """
+    Split the data, fit a single-feature linear regression, keep predictions.
+
+    The model is fitted by ordinary least squares on the training rows only;
+    the test rows are never seen during fitting, so their error is an honest
+    estimate. Everything downstream (metrics, plots) reuses the returned
+    dictionary instead of refitting.
+    """
     X = df[[FEATURE_COL]].to_numpy()  # 2-D: sklearn expects columns of features
     y = df[TARGET_COL].to_numpy()     # 1-D target
 
@@ -47,7 +75,14 @@ def fit_linear_model(
 
 
 def evaluate(res: dict) -> dict:
-    """Compute RMSE (train/test), R2, and a mean-prediction baseline to beat."""
+    """
+    Compute RMSE (train and test), R2, and a baseline to beat.
+
+    The baseline always predicts the training-set mean annoyance: it is the
+    strongest model that uses no feature at all, and it is the reference R2
+    is measured against. A model that cannot beat it has learned nothing
+    from the feature.
+    """
     y_train, y_test = res["y_train"], res["y_test"]
 
     # RMSE on held-out test data (the honest metric) and on training data
@@ -74,7 +109,14 @@ def evaluate(res: dict) -> dict:
 
 
 def make_plots(df: pd.DataFrame, res: dict, out_dir: str | Path) -> list[Path]:
-    """Save (1) scatter of all data + fitted line, (2) predicted vs actual on test."""
+    """
+    Save the two standard figures for one fitted model.
+
+    1) The data with the fitted line; training and test signals are drawn
+       with different shapes, so the plot shows what the line was fitted on.
+    2) Predicted against actual annoyance on the test set, with the y = x
+       diagonal as the perfect-prediction reference.
+    """
     import matplotlib
     matplotlib.use("Agg")  # non-interactive backend: just write files, no window
     import matplotlib.pyplot as plt
@@ -88,9 +130,11 @@ def make_plots(df: pd.DataFrame, res: dict, out_dir: str | Path) -> list[Path]:
     fig, ax = plt.subplots(figsize=(7, 5))
 
     # Blue triangles: the signals the line was actually fitted on
-    ax.scatter(res["X_train"].ravel(), res["y_train"], marker="^", color="tab:blue", alpha=0.7, label="training signals")
+    ax.scatter(res["X_train"].ravel(), res["y_train"], marker="^",
+               color="tab:blue", alpha=0.7, label="training signals")
     # Orange crosses: the held-out signals, shown but not used for fitting
-    ax.scatter(res["X_test"].ravel(), res["y_test"], marker="x", color="tab:orange", alpha=0.9, label="test signals")
+    ax.scatter(res["X_test"].ravel(), res["y_test"], marker="x",
+               color="tab:orange", alpha=0.9, label="test signals")
     # Evaluate the fitted line across the frequency range to draw it smoothly
     xs = np.linspace(df[FEATURE_COL].min(), df[FEATURE_COL].max(), 100).reshape(-1, 1)
     ax.plot(xs, model.predict(xs), color="crimson", label="fitted line")
@@ -125,27 +169,25 @@ def make_plots(df: pd.DataFrame, res: dict, out_dir: str | Path) -> list[Path]:
 
 
 def cross_validate(
-    df,
+    df: pd.DataFrame,
     n_splits: int = 5,
     holdout_size: float = 0.20,
     random_state: int = 42,
-):
+) -> dict:
     """Hold out a final test set, run k-fold on the rest, keep the best fold.
 
     Procedure:
       1. Set aside holdout_size of the signals as a final test set; it is never
          used for training or for choosing a model.
       2. Split the remaining signals into n_splits folds.
-      3. Train n_splits times: 4 folds train, 1 fold validates each time.
+      3. Train n_splits times: all folds but one train, the last one validates.
       4. Select the fold with the LOWEST validation RMSE.
       5. Evaluate that selected model on the untouched holdout set.
       6. The holdout scores are the reported results.
-    """
-    import numpy as np
-    from sklearn.linear_model import LinearRegression
-    from sklearn.metrics import mean_squared_error, r2_score
-    from sklearn.model_selection import KFold, train_test_split
 
+    RMSE is the selection criterion rather than R2 because R2 is too noisy
+    on validation folds of only about a dozen signals.
+    """
     X = df[[FEATURE_COL]].to_numpy()
     y = df[TARGET_COL].to_numpy()
 
