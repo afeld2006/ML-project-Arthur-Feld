@@ -1,3 +1,20 @@
+"""
+Join the extracted features to the annoyance labels into one dataset.
+
+Reads a feature CSV and the psychoacoustic workbook, builds one row per
+(signal, phase) holding the features next to the mean annoyance score,
+and saves the table the models train on. Feature rows whose filename
+finds no label are listed rather than silently dropped.
+
+The defaults match the mean-frequency pipeline; the same script joins
+the DMD table by changing the two paths.
+
+Run from the project root:
+    py scripts/build_dataset.py
+    py scripts/build_dataset.py --features features/dmd_features.csv
+        --output features/dmd_dataset.csv
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -17,12 +34,12 @@ CLEANED_SHEET = "Without P. 27, 12, 20, 46, 51"
 def main() -> None:
     # Command-line options let the join be reconfigured without editing the code
     parser = argparse.ArgumentParser(
-        description="Join mean-frequency features to annoyance labels."
+        description="Join extracted features to annoyance labels."
     )
     parser.add_argument(
         "--features",
         default="features/mean_frequency_features.csv",
-        help="Feature CSV produced by extract_mean_frequencies.py.",
+        help="Feature CSV produced by an extraction script.",
     )
     parser.add_argument(
         "--labels",
@@ -70,6 +87,7 @@ def main() -> None:
         print("\nThese feature files had no matching label:")
         print(unmatched[["filename", "AudioNum", "Phase"]].to_string(index=False))
 
-# Only run main() when this file is executed directly, not when imported
+
+# Only run when executed directly, not when imported
 if __name__ == "__main__":
     main()

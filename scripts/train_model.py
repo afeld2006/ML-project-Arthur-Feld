@@ -1,3 +1,20 @@
+"""
+Train and evaluate the MVP model on one train/test split.
+
+Fits the single-feature linear regression (annoyance ~ mean frequency),
+scores it on the held-out fraction against the predict-the-mean baseline,
+and writes metrics.txt plus the two standard figures into the output
+folder.
+
+Changing --test-size is how the split experiment was run, one output
+folder per split:
+
+Run from the project root:
+    py scripts/train_model.py --test-size 0.20 --output-dir reports/split_8020
+    py scripts/train_model.py --test-size 0.30 --output-dir reports/split_7030
+    py scripts/train_model.py --test-size 0.45 --output-dir reports/split_5545
+"""
+
 from __future__ import annotations
 
 import argparse

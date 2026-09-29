@@ -8,9 +8,14 @@ Procedure:
   5. Evaluate that model on the untouched 20%.
   6. Report those RMSE and R2 values as the results.
 
+Writes metrics.txt (per-fold results plus the final scores), the per-fold
+RMSE bar chart, and the real vs. predicted plot on the holdout signals.
+
 Run from the project root:
     py scripts/train_model_kfold.py
 """
+
+from __future__ import annotations
 
 import argparse
 import sys
@@ -28,7 +33,9 @@ from model import cross_validate, load_dataset
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Evaluate the MVP model with a holdout set plus k-fold selection."
+    )
     parser.add_argument("--n-splits", type=int, default=5,
                         help="Number of folds on the 80 percent pool (default: 5).")
     parser.add_argument("--holdout-size", type=float, default=0.20,

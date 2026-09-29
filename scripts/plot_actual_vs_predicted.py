@@ -9,6 +9,8 @@ Run from the project root, e.g.:
     py scripts/plot_actual_vs_predicted.py --test-size 0.30 --output-dir reports/split_7030
 """
 
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
@@ -25,7 +27,9 @@ from model import fit_linear_model, load_dataset
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Plot real vs. predicted annoyance on the test set."
+    )
     parser.add_argument("--test-size", type=float, default=0.20,
                         help="Test fraction for the split (e.g. 0.20, 0.30, 0.45).")
     parser.add_argument("--output-dir", default="reports",
@@ -59,7 +63,7 @@ def main() -> None:
 
     ax.set_xlabel("Mean frequency (Hz)")
     ax.set_ylabel("Annoyance (0-5)")
-    ax.set_title(f"Real vs. predicted annoyance — test set ({tag} split)")
+    ax.set_title(f"Real vs. predicted annoyance : test set ({tag} split)")
     ax.legend(frameon=False)
     ax.grid(True, color="0.92", linewidth=0.6)
     fig.tight_layout()

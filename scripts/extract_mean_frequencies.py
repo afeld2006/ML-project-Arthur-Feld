@@ -1,8 +1,24 @@
+"""
+Extract the mean-frequency feature from every .mat spectrogram.
+
+Walks a folder of .mat files, computes the power-weighted mean frequency
+of each spectrogram, and writes one row per file (the value, how it was
+obtained, and a status) to a CSV. A file that fails is recorded as an
+error row rather than stopping the run.
+
+The variable keys can be auto-detected, but the project runs pin them
+explicitly so the extraction never has to guess.
+
+Run from the project root:
+    py scripts/extract_mean_frequencies.py data/raw --freq-key freq
+        --spectrogram-key psdx_dB --values-are-db true
+"""
+
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 # Make src/ importable so this script can call the shared extraction logic
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +29,9 @@ from mat_spectrogram_features import extract_mean_frequencies_from_folder
 
 def main() -> None:
     # Every option below is exposed as a flag, so behaviour changes without editing code
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Extract the mean-frequency feature from .mat spectrograms."
+    )
 
     parser.add_argument(
         "input_dir",
