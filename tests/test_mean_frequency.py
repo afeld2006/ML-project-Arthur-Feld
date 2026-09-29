@@ -1,10 +1,22 @@
 """
 Sanity check for calculate_mean_frequency.
 
-Builds synthetic spectrograms with KNOWN centroids and confirms the
-function returns the hand-computed answer. Run from the project root:
+Builds tiny synthetic spectrograms whose centroids are known by hand and
+confirms the function returns the hand-computed answer. These matrices are
+fed to the function directly; test_sinusoid_recovery.py covers the fuller
+chain that starts from an actual waveform.
 
-    python tests/test_mean_frequency.py
+Six checks:
+  1. Single-bin centroid  - all power in one bin must give that bin.
+  2. Symmetric weighting  - weights 1, 2, 1 around 200 Hz must give 200.
+  3. Asymmetric weighting - the centroid must follow the heavier bin.
+  4. dB path              - the dB input must match the linear input
+                            (validates P = 10^(dB/10)).
+  5. fmin/fmax window     - bins outside the band must be ignored.
+  6. Peak method          - strongest bin per frame, averaged over time.
+
+Run from the project root:
+    py tests/test_mean_frequency.py
 """
 
 import sys

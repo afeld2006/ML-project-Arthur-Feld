@@ -1,9 +1,10 @@
 """
 Plot the synthetic signals used in test_sinusoid_recovery.py.
 
-Produces figures showing, for each test group, the waveform on the left and its
-power spectrum on the right, with the recovered mean frequency marked. These are
-visual companions to the tests; they do not verify anything themselves.
+Produces figures showing, for test groups A to C, the waveform on the left and
+its power spectrum on the right, with the recovered mean frequency marked. These
+are visual companions to the tests; they do not verify anything themselves.
+Group D only re-checks the dB conversion, so it has no figure of its own.
 
 Run from the project root:
     py tests/plot_test_signals.py
