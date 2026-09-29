@@ -1,3 +1,20 @@
+"""
+Load MATLAB spectrogram files and compute the mean-frequency feature.
+
+This module carries every reusable step of the MVP feature extraction:
+reading a .mat file (with a fallback for the newer v7.3 format), locating
+the frequency vector and the spectrogram matrix inside it, deciding
+whether the values are stored in dB, and reducing the whole spectrogram
+to a single number, the power-weighted mean frequency (spectral centroid).
+
+The variable keys can be pinned by the caller (the normal case for this
+project: freq and psdx_dB) or auto-detected, so the same code also works
+on .mat files whose variable names are not known in advance.
+
+The math is verified against known answers by tests/test_mean_frequency.py
+and tests/test_sinusoid_recovery.py before being trusted on the real data.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,12 +32,14 @@ def clean_mat_dict(mat: dict[str, Any]) -> dict[str, Any]:
 
 def load_any_mat(mat_path: str | Path) -> dict[str, Any]:
     """
-    Load a MATLAB .mat file.
+    Load a MATLAB .mat file, whatever its version.
 
-    Works for normal .mat files through scipy.
-    Tries h5py if the file is MATLAB v7.3.
+    MATLAB changed its storage format at v7.3: older files are a binary
+    that scipy reads, newer ones are HDF5 containers that need h5py.
+    scipy is tried first with a fallback to the HDF5 reader, so the rest
+    of the code never has to care which version a given file is.
     """
-    mat_path = Path(mat_path)
+    mat_path = Path(mat_path)  # accept str or Path
 
     try:
         # Standard loader for .mat versions up to v7
@@ -44,6 +63,10 @@ def load_any_mat(mat_path: str | Path) -> dict[str, Any]:
 def load_hdf5_mat(mat_path: Path) -> dict[str, Any]:
     """
     Fallback loader for MATLAB v7.3 files.
+
+    A v7.3 file is an HDF5 container whose variables can be nested inside
+    groups; they are walked recursively and flattened into one dictionary,
+    so the result has the same shape as the scipy loader's output.
     """
     import h5py  # imported here so h5py is only needed for v7.3 files
 
@@ -72,6 +95,7 @@ def load_hdf5_mat(mat_path: Path) -> dict[str, Any]:
 
 
 def is_numeric_array(x: Any) -> bool:
+    """Return True when numpy can view the variable as numbers."""
     try:
         arr = np.asarray(x)
     except Exception:
@@ -81,6 +105,12 @@ def is_numeric_array(x: Any) -> bool:
 
 
 def looks_like_frequency_vector(arr: np.ndarray) -> bool:
+    """
+    Check whether an array behaves like a frequency axis.
+
+    Used by the auto-detection: a real frequency axis is 1-D, holds at
+    least two finite values, and never decreases or goes negative.
+    """
     arr = np.squeeze(arr)  # remove length-1 dimensions
 
     if arr.ndim != 1:  # a frequency axis must be 1-D
@@ -104,6 +134,11 @@ def find_frequency_vector(
 ) -> tuple[str, np.ndarray]:
     """
     Find the frequency vector inside a .mat file.
+
+    Three strategies, from most to least direct: trust the key pinned by
+    the caller, try the usual MATLAB variable names, then scan every
+    variable for one that behaves like a frequency axis. The key that was
+    used is returned with the vector, so the choice stays visible.
     """
 
     # If the caller pinned the key, trust it and skip auto-detection
@@ -149,7 +184,7 @@ def find_frequency_vector(
     # Prefer the longest vector (the real frequency axis is usually the largest)
     candidates.sort(key=lambda item: item[1].size, reverse=True)
 
-    return candidates[0]
+    return candidates[0]  # (key, vector) of the best candidate
 
 
 def find_spectrogram_matrix(
@@ -161,6 +196,11 @@ def find_spectrogram_matrix(
     Find the spectrogram matrix inside a .mat file.
 
     Returns a matrix with shape frequency x time.
+
+    The frequency vector found beforehand is what identifies the matrix:
+    a candidate must be 2-D with one axis matching that vector's length,
+    and it is transposed if needed so that rows are always frequency.
+    When several variables qualify, the best-named one wins.
     """
 
     freq_len = len(freq)  # used to match the correct axis
@@ -235,6 +275,9 @@ def find_spectrogram_matrix(
 def detect_db_values(spectrogram: np.ndarray, spectrogram_key: str) -> bool:
     """
     Guess whether values are in dB.
+
+    Two independent hints are used: a "db" in the variable name, and the
+    presence of negative values, which linear power cannot contain.
     """
 
     # A "db" in the variable name is a strong, direct hint
@@ -265,12 +308,29 @@ def calculate_mean_frequency(
     Calculate mean frequency from one spectrogram.
 
     method="weighted":
-        Power-weighted mean frequency across the whole spectrogram.
+        Power-weighted mean frequency across the whole spectrogram, i.e.
+        the spectral centroid: f_bar = sum(f_i * P_ij) / sum(P_ij).
 
     method="peak":
         Strongest frequency at each time step, then averaged.
+
+    Parameters
+    ----------
+    freq : ndarray, shape (n_bins,)
+        Frequency of each spectrogram row, in Hz.
+    spectrogram : ndarray, shape (n_bins, n_times)
+        Power values, in dB or linear depending on values_are_db.
+    values_are_db : bool
+        Whether the values are decibels; they are then converted back to
+        linear power first, since averaging dB directly has no physical
+        meaning (dB is a logarithmic scale).
+    fmin, fmax : float or None
+        Optional band limits in Hz; bins outside them are ignored.
+    method : str
+        "weighted" for the centroid, "peak" for the strongest bin.
     """
 
+    # Work in float regardless of how MATLAB stored the numbers
     freq = np.asarray(freq, dtype=float)
     spectrogram = np.asarray(spectrogram, dtype=float)
 
@@ -332,6 +392,11 @@ def extract_mean_frequency_from_mat(
 ) -> dict[str, Any]:
     """
     Extract one mean-frequency value from one .mat file.
+
+    Chains the four steps: load the file, locate the frequency vector and
+    the spectrogram, decide whether the values are dB, then compute the
+    feature. The value is returned together with metadata describing how
+    it was obtained, so every row of the output table is self-documenting.
     """
 
     mat_path = Path(mat_path)
@@ -394,6 +459,10 @@ def extract_mean_frequencies_from_folder(
 ) -> pd.DataFrame:
     """
     Extract mean frequencies from every .mat file in a folder.
+
+    Returns one row per file. A file that fails is recorded as a row with
+    status "error" instead of raising, so one bad file cannot lose the
+    whole batch. The table is optionally written to output_csv.
     """
 
     input_dir = Path(input_dir)
@@ -440,6 +509,7 @@ def extract_mean_frequencies_from_folder(
                 "error": str(exc),
             }
 
+        # Either the feature row or the error row; the batch always advances
         rows.append(row)
 
     df = pd.DataFrame(rows)  # one row per file
@@ -456,9 +526,12 @@ def extract_mean_frequencies_from_folder(
 def inspect_mat_file(mat_path: str | Path) -> pd.DataFrame:
     """
     Show variables inside one .mat file.
+
+    Exploration helper used before pinning the keys: it lists each
+    variable's name, shape and type so the right ones can be chosen.
     """
 
-    mat = load_any_mat(mat_path)
+    mat = load_any_mat(mat_path)  # same loader as the extraction
 
     rows = []
 
