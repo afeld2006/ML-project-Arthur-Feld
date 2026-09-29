@@ -1,21 +1,24 @@
+# Direct dependencies; the libraries the code imports
+h5py==3.16.0            # fallback loader for MATLAB v7.3 .mat files
+matplotlib==3.11.0      # every plot and report figure
+numpy==2.5.0            # array math everywhere
+openpyxl==3.1.5         # lets pandas read the psychoacoustic Excel workbook
+pandas==3.0.3           # feature tables, joins, CSV output
+scikit-learn==1.9.0     # linear regression, splits, k-fold, metrics
+scipy==1.18.0           # loads the .mat spectrogram files
+
+# Transitive dependencies; pinned so the environment is fully reproducible
 contourpy==1.3.3
 cycler==0.12.1
 et_xmlfile==2.0.0
 fonttools==4.63.0
-h5py==3.16.0
 joblib==1.5.3
 kiwisolver==1.5.0
-matplotlib==3.11.0
 narwhals==2.23.0
-numpy==2.5.0
-openpyxl==3.1.5
 packaging==26.2
-pandas==3.0.3
 pillow==12.3.0
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
-scikit-learn==1.9.0
-scipy==1.18.0
 six==1.17.0
 threadpoolctl==3.6.0
 tzdata==2026.2

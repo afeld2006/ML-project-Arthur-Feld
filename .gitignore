@@ -1,2 +1,9 @@
+# Python virtual environment; recreated from requirements.txt
 venv/
+
+# Python bytecode caches
 __pycache__/
+
+# Editor and OS clutter
+.vscode/
+Thumbs.db
